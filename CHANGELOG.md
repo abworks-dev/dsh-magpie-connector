@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **设置页把 Magpie 路由组收进独立的「路由组」小节。** 此前 `group/…` 开头的路由组会跟随网关给出的 `owned_by`（例如 `commandcode`），和厂商模型挤在同一栏、勾选可见性时难以区分。现在它们跨 provider 收集到「路由组」小节，厂商小节只留厂商模型，只剩路由组的归属不再渲染空面板。纯前端改动：可见性仍按该归属键保存，DSH 路由与 `visibleModels` 键不变、无需迁移；厂商小节会提示「跟随网关模型列表」会一并恢复这些路由组。
+
 ## 0.6.12 — 2026-11-11
 
 - **修复模型请求绕过宿主全局 fetch 上下文处理的问题（prgrmrwy/dsh-magpie-connector#7）。** `POST /responses` 和 `POST /chat/completions` 在发送时读取全局 `fetch`，使 billion-context 等宿主中间件能够处理模型请求；目录、额度与重置等管理请求仍直接调用 undici。保留专用 dispatcher、连接超时、认证与归属 headers、禁止重定向、取消信号和错误分类。

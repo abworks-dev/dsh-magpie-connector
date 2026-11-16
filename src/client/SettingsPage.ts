@@ -8,8 +8,8 @@ import { t, type MagpieKey } from './locales.js'
 import { DEFAULT_REFRESH_MINUTES, MAX_REFRESH_MINUTES, setSidebarPreference } from './sidebar-preference.js'
 import { DEFAULT_SIDEBAR_WINDOWS, SIDEBAR_WINDOW_KINDS, normalizeSidebarWindows, type SidebarWindowKind } from '../shared/sidebar-window.js'
 import {
-  cacheIds, cardKey, checkDiff, checkSignature, formatTime, parseCards, parseCheck, parseResetOutcome, parseResetTicket, providerOrder, readTime, resetAccount, sameTarget,
-  type Card, type CardsView, type CheckSnapshot, type ModelGroup, type ModelRow, type ResetTicket, type SettingsView, type SyncErrorKind,
+  cacheIds, cardKey, checkDiff, checkSignature, formatTime, isRoutingGroupId, parseCards, parseCheck, parseResetOutcome, parseResetTicket, providerSections, readTime, resetAccount, routingGroupModels, sameTarget,
+  type Card, type CardsView, type CheckSnapshot, type ModelGroup, type ModelRow, type ResetTicket, type RoutingGroupRow, type SettingsView, type SyncErrorKind,
 } from './view-model.js'
 
 /**
@@ -296,7 +296,8 @@ export function MagpieSettings({ api }: { api: Api }) {
       usage: h(UsageStatus, { cards, busy, ...(noteScope === undefined ? { notice, alert: usageAlert } : {}), onFetchAll: () => { void fetchAll() }, saving: savingSettings }) })
       : settingsError ? null : h('p', { role: 'status', className: 'dmg-hint' }, t('readingSettings')),
     settings ? h(SidebarUsagePreference, { settings, saving: savingSettings, mutateSettings }) : null,
-    ...providerOrder(groups, cardList).map(provider => h(ProviderGroup, {
+    settings ? h(RoutingGroups, { groups, settings, saving: savingSettings, mutateSettings }) : null,
+    ...providerSections(groups, cardList).map(provider => h(ProviderGroup, {
       key: provider, provider,
       group: groups.find(g => g.provider === provider),
       settings,
@@ -721,7 +722,10 @@ function ProviderGroup({ provider, group, settings, cards, busy, saving, mutateS
   const [error, setError] = useState('')
   const saved = settings?.visibleModels ?? {}
   const following = !Object.hasOwn(saved, provider)
-  const models = group?.models ?? []
+  // Routing groups are drawn once, in their own section; the whitelist this
+  // panel writes still covers them (setVisible reads the unfiltered list below).
+  const models = (group?.models ?? []).filter(model => !isRoutingGroupId(model.id))
+  const hasRoutingGroups = (group?.models ?? []).some(model => isRoutingGroupId(model.id))
   const post = async (body: Parameters<SettingsMutation>[0]) => {
     setError('')
     const result = await mutateSettings(body)
@@ -749,6 +753,7 @@ function ProviderGroup({ provider, group, settings, cards, busy, saving, mutateS
       h('h3', null, provider),
       group && !following ? h('button', { type: 'button', className: 'dmg-button', disabled: saving, onClick: follow }, t('followCatalog')) : null),
     group ? h('p', { className: 'dmg-hint' }, following ? t('visibilityFollow') : t('visibilityManual')) : null,
+    group && !following && hasRoutingGroups ? h('p', { className: 'dmg-hint' }, t('routingGroupsUnderProvider')) : null,
     models.length ? h('div', { className: 'dmg-models' }, ...models.map(model => h(ModelLine, {
       key: model.id, model, disabled: saving,
       visible: model.visible ?? (following || (saved[provider] ?? []).includes(model.id)),
@@ -787,6 +792,55 @@ function ModelLine({ model, visible, effort, disabled, onVisible, onEffort }: {
     h('option', { value: '' }, t('defaultEffortNone')),
     stale ? h('option', { value: effort, disabled: true }, t('effortStale', { effort })) : null,
     ...efforts.map(id => h('option', { key: id, value: id }, id))) : null)
+}
+
+interface RoutingGroupsProps {
+  groups: ModelGroup[]; settings: SettingsView | undefined; saving: boolean; mutateSettings: SettingsMutation
+}
+
+/**
+ * Magpie routing groups (`group/…` ids) collected from every provider into one
+ * section, because the gateway maps them to whichever provider key it reports
+ * and they are not vendor models. The host still filters each row by its
+ * original provider, so a toggle here writes that provider's whitelist — never
+ * a routing-specific key the host does not have.
+ */
+function RoutingGroups({ groups, settings, saving, mutateSettings }: RoutingGroupsProps) {
+  const [error, setError] = useState('')
+  const rows = routingGroupModels(groups)
+  const saved = settings?.visibleModels ?? {}
+  const post = async (body: Parameters<SettingsMutation>[0]) => {
+    setError('')
+    const result = await mutateSettings(body)
+    if (result?.error) setError(result.error)
+  }
+  // Same rule as a provider section: rebuild from the latest view after the lock,
+  // so a model the catalog no longer lists is neither resurrected nor dropped.
+  const setVisible = (row: RoutingGroupRow, visible: boolean) => {
+    void post(view => {
+      const saved = view.visibleModels ?? {}
+      const providerModels = view.groups?.find(g => g.provider === row.provider)?.models ?? []
+      const current = Object.hasOwn(saved, row.provider) ? saved[row.provider]! : providerModels.map(model => model.id)
+      const next = visible ? [...new Set([...current, row.id])] : current.filter(id => id !== row.id)
+      return { visibleModels: { ...saved, [row.provider]: next } }
+    })
+  }
+  // Routing rows only: ordinary picks under the same provider key stay as they are.
+  if (!rows.length) return null
+  return h('section', { className: 'dmg-panel', 'data-routing-groups': '', 'aria-label': t('routingGroups') },
+    h('div', { className: 'dmg-head' }, h('h3', null, t('routingGroups'))),
+    h('p', { className: 'dmg-hint' }, t('routingGroupsHint')),
+    h('div', { className: 'dmg-models' }, ...rows.map(row => {
+      const following = !Object.hasOwn(saved, row.provider)
+      return h('div', { key: row.id, 'data-routing-provider': row.provider }, h(ModelLine, {
+        model: row, disabled: saving,
+        visible: row.visible ?? (following || (saved[row.provider] ?? []).includes(row.id)),
+        effort: settings?.defaultEfforts?.[row.id],
+        onVisible: (visible: boolean) => setVisible(row, visible),
+        onEffort: (effort: string | null) => { void post({ defaultEffort: { model: row.id, effort } }) },
+      }))
+    })),
+    error ? h('p', { className: 'dmg-error', role: 'alert' }, error) : null)
 }
 
 /** Copy for one checkbox in the window selection. */

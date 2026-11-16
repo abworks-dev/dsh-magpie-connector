@@ -93,6 +93,8 @@ interface CatalogModel {
 }
 ```
 
+The settings client draws every `info.id` that starts with `group/` in one **Routing groups** section instead of a provider panel. That is presentation only: the row keeps its `provider`, which stays the visibility key, so a checkbox writes `visibleModels[<that provider>]`, the route and owner are untouched, and moving the section needs no migration. A provider whose every model is a routing group (and that has no usage card) gets no empty panel.
+
 `new MagpieAdapter(runtime, attachments?, isFast?)` extends the real DSH `LlmAdapter`. `attachments` is `Pick<AttachmentStore, 'readImage' | 'imageHostPath'>`; `isFast(sessionId): boolean` is evaluated at **stream** time. Priority still requires the captured catalog's `serviceTiers` to contain `priority`.
 
 - `prepareCall(provider, model)` captures operation identity and a detached model capability snapshot. Its stream is single-use and does not resolve credentials or consult current address/catalog again. Key/address changes do not abort prepared/running generation.

@@ -208,3 +208,44 @@ export function providerOrder(groups: ModelGroup[], cards: Card[]): string[] {
   for (const card of cards) if (!order.includes(card.provider)) order.push(card.provider)
   return order
 }
+
+/** Prefix Magpie uses for routing groups: the gateway owns it, no vendor does. */
+export const ROUTING_GROUP_PREFIX = 'group/'
+export const isRoutingGroupId = (id: string): boolean => id.startsWith(ROUTING_GROUP_PREFIX)
+
+/**
+ * A routing-group row keeps the provider it was mapped to. That provider is
+ * still the host's visibility key, so presenting the row elsewhere must not
+ * re-key it — only the section it is drawn in changes.
+ */
+export interface RoutingGroupRow extends ModelRow { provider: string }
+
+/**
+ * Routing-group models across every provider, in catalog order, first id wins.
+ * A pure view concern: the host keeps filtering these models by their original
+ * provider, and no settings key is migrated.
+ */
+export function routingGroupModels(groups: ModelGroup[] | undefined): RoutingGroupRow[] {
+  const seen = new Set<string>()
+  const rows: RoutingGroupRow[] = []
+  for (const group of groups ?? []) {
+    for (const model of group.models) {
+      if (!isRoutingGroupId(model.id) || seen.has(model.id)) continue
+      seen.add(model.id)
+      rows.push({ ...model, provider: group.provider })
+    }
+  }
+  return rows
+}
+
+/**
+ * Providers that still have a section of their own: one whose every model is a
+ * routing group (and that has no usage card) would otherwise render an empty
+ * panel, because its models now live in the routing-group section.
+ */
+export function providerSections(groups: ModelGroup[], cards: Card[]): string[] {
+  return providerOrder(groups, cards).filter(provider => {
+    const group = groups.find(g => g.provider === provider)
+    return (group?.models.some(model => !isRoutingGroupId(model.id)) ?? false) || cards.some(card => card.provider === provider)
+  })
+}
