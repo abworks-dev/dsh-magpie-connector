@@ -25,6 +25,11 @@ export interface Settings {
   sidebarUsage?: boolean
   /** Sidebar card auto-refresh interval in whole minutes; 0 disables, absent = 5. */
   sidebarRefreshMinutes?: number
+  /**
+   * Model ids that may receive images even though the gateway declared no
+   * `modalities`. Absent = none; a gateway declaration always wins over this.
+   */
+  imageModels?: string[]
   /** Gateway windows the sidebar card lists, canonically ordered; absent = `['weekly']`. */
   sidebarWindows?: SidebarWindowKind[]
   /** 0.6.7 legacy single tier; read once for migration, never written. */
@@ -53,6 +58,7 @@ export function normalizeBaseUrl(value: unknown): string {
 
 export const MAX_LINES = 5
 export const MAX_OWNERS = 32
+export const MAX_IMAGE_MODELS = 200
 const OWNER_KEY = /^[a-z0-9][a-z0-9._-]*$/
 export const LINE_ID_PATTERN = /^[0-9a-f]{8}$/
 export const isAccessMode = (value: unknown): value is AccessMode => value === 'direct' || value === 'cloudflare'
@@ -122,5 +128,18 @@ export function validateKnownOwners(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > MAX_OWNERS) throw new Error('Invalid knownOwners')
   for (const key of value) if (typeof key !== 'string' || key.length < 1 || key.length > 48 || !OWNER_KEY.test(key)) throw new Error('Invalid knownOwners')
   if (new Set(value).size !== value.length) throw new Error('Invalid knownOwners')
+  return [...value] as string[]
+}
+
+/**
+ * Load-time check of `imageModels`: missing = empty; each entry a non-empty model
+ * id, no duplicates, at most {@link MAX_IMAGE_MODELS}. Any violation throws so the
+ * caller reads the whole list as empty instead of trusting part of it.
+ */
+export function validateImageModels(value: unknown): string[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value) || value.length > MAX_IMAGE_MODELS) throw new Error('Invalid imageModels')
+  for (const id of value) if (typeof id !== 'string' || !id || id.length > 256) throw new Error('Invalid imageModels')
+  if (new Set(value).size !== value.length) throw new Error('Invalid imageModels')
   return [...value] as string[]
 }

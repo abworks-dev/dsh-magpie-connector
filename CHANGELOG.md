@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **网关没声明图片能力的模型，DSH 0.2.3 起发不出图片；现在可以按模型显式声明。** DSH 0.2.3-alpha.2 提交附件时硬校验 `model.inputModalities`，缺 `image` 就直接报 `session/attachment-invalid`（`MODEL_DOES_NOT_SUPPORT_IMAGES`）。连接器把网关目录翻成 DSH 模型声明时，`modalities.input` 缺失一律落成 `['text']`，于是 `opendesign/deepseek-v4.1-flash` 这类网关未填该字段、实际能收图的模型被 DSH 挡在输入框外（旧版 DSH 不校验声明，所以此前一直可用，用户体感是「升级后突然发不了图」）。设置页每个模型行新增「图片」勾选，写入新的 `imageModels` 偏好；`mapCatalog`、`listModels`、`resolveModel` 在读取时应用它。网关自己的声明永远优先：`modalities.input` 非空时按网关判定，只有「网关什么都没声明」才由偏好补位，不会把一次用户勾选当成对真实声明的覆盖。偏好只存模型 id，重启后仍生效；模型从目录消失时仅该条目失效，其余偏好保留。
+
 ## 0.7.4 — 2026-11-20
 
 - **多账号行改为两行，信息不再被挤掉。** 账号标识与完整 plan 一行，窗口名、到期时间、读数与进度条一行；只有账号标识会截断（悬停看全名），plan、到期时间与读数完整显示。

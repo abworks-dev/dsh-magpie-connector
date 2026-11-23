@@ -756,8 +756,10 @@ function ProviderGroup({ provider, group, settings, cards, busy, saving, mutateS
       key: model.id, model, disabled: saving,
       visible: model.visible ?? (following || (saved[provider] ?? []).includes(model.id)),
       effort: settings?.defaultEfforts?.[model.id],
+      image: model.image === true,
       onVisible: (visible: boolean) => setVisible(model, visible),
       onEffort: (effort: string | null) => { void post({ defaultEffort: { model: model.id, effort } }) },
+      onImage: (image: boolean) => { void post({ imageModel: { model: model.id, image } }) },
     }))) : null,
     cards.length ? h('div', { className: 'dmg-cards' }, ...cards.map(card => h(UsageCard, {
       key: cardKey(card), card, busy, disabled: saving,
@@ -770,9 +772,9 @@ function ProviderGroup({ provider, group, settings, cards, busy, saving, mutateS
     error ? h('p', { className: 'dmg-error', role: 'alert' }, error) : null)
 }
 
-function ModelLine({ model, visible, effort, disabled, onVisible, onEffort }: {
-  model: ModelRow; visible: boolean; effort: string | undefined; disabled: boolean
-  onVisible: (visible: boolean) => void; onEffort: (effort: string | null) => void
+function ModelLine({ model, visible, effort, image, disabled, onVisible, onEffort, onImage }: {
+  model: ModelRow; visible: boolean; effort: string | undefined; image: boolean; disabled: boolean
+  onVisible: (visible: boolean) => void; onEffort: (effort: string | null) => void; onImage: (image: boolean) => void
 }) {
   const efforts = model.efforts ?? []
   // Stale = saved but no longer offered by the gateway (design D7: the client judges this itself).
@@ -783,6 +785,10 @@ function ModelLine({ model, visible, effort, disabled, onVisible, onEffort }: {
       h('input', { type: 'checkbox', checked: visible, disabled, 'aria-label': t('showInPicker', { label }), onChange: (e: { target: { checked: boolean } }) => onVisible(e.target.checked) }),
       h('span', null, label),
       model.name && model.name !== model.id ? h('code', null, model.id) : null,
+      // The gateway declared no image support for this model; the user asserts it does.
+      h('label', { className: 'dmg-image', title: t('imageInputAria', { label }) },
+        h('input', { type: 'checkbox', checked: image, disabled, 'aria-label': t('imageInputAria', { label }), onChange: (e: { target: { checked: boolean } }) => onImage(e.target.checked) }),
+        h('span', null, t('imageInput'))),
       model.routingKind ? h('span', { className: 'dmg-hint', 'data-routing-kind': model.routingKind }, t(model.routingKind === 'auto' ? 'routingKindAuto' : 'routingKindCustom')) : null),
     efforts.length ? h('select', {
       className: 'dmg-select', 'aria-label': t('defaultEffortAria', { label }), disabled,

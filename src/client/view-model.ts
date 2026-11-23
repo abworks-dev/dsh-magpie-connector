@@ -24,7 +24,7 @@ export interface Card {
 export type CardsStatus = 'ok' | 'forbidden' | 'error' | 'unconfigured'
 export interface CardsView { status: CardsStatus; error?: string; cards: Card[] }
 
-export interface ModelRow { id: string; name?: string; efforts?: string[]; visible?: boolean; /** Set by the host on Magpie routing entries only. */ routingKind?: 'auto' | 'custom' }
+export interface ModelRow { id: string; name?: string; efforts?: string[]; visible?: boolean; image?: boolean; /** Set by the host on Magpie routing entries only. */ routingKind?: 'auto' | 'custom' }
 /** Visibility key and settings section of every routing entry (host `ROUTING_OWNER`). */
 export const ROUTING_PROVIDER = 'routing'
 export interface ModelGroup { provider: string; models: ModelRow[] }
@@ -42,6 +42,8 @@ export interface SettingsView {
   access?: { clientId?: { configured?: boolean; writable?: boolean }; clientSecret?: { configured?: boolean; writable?: boolean } }
   lastSyncAt?: string; lastSyncError?: string; lastSyncErrorKind?: SyncErrorKind
   groups?: ModelGroup[]; visibleModels?: Record<string, string[]>; defaultEfforts?: Record<string, string>
+  /** Model ids allowed to receive images although the gateway declared no `modalities`. */
+  imageModels?: string[]
   /** Initial route registration failed (design D6): the host must be restarted to recover. */
   routeRegistrationError?: { code: string; route?: string }
   /** knownOwners was invalid at load and reset to empty (spec 归属 route 持久). */
