@@ -782,15 +782,17 @@ function ModelLine({ model, visible, effort, image, disabled, onVisible, onEffor
   const stale = effort !== undefined && !efforts.includes(effort)
   const label = model.name || model.id
   return h('div', { className: 'dmg-model', 'data-model': model.id },
-    h('label', null,
-      h('input', { type: 'checkbox', checked: visible, disabled, 'aria-label': t('showInPicker', { label }), onChange: (e: { target: { checked: boolean } }) => onVisible(e.target.checked) }),
+    h('label', { className: 'dmg-model-name' },
+      h('input', { type: 'checkbox', checked: visible, disabled, 'data-role': 'visible', 'aria-label': t('showInPicker', { label }), onChange: (e: { target: { checked: boolean } }) => onVisible(e.target.checked) }),
       h('span', null, label),
       model.name && model.name !== model.id ? h('code', null, model.id) : null,
-      // The gateway declared no image support for this model; the user asserts it does.
-      h('label', { className: 'dmg-image', title: t('imageInputAria', { label }) },
-        h('input', { type: 'checkbox', checked: image, disabled, 'aria-label': t('imageInputAria', { label }), onChange: (e: { target: { checked: boolean } }) => onImage(e.target.checked) }),
-        h('span', null, t('imageInput'))),
       model.routingKind ? h('span', { className: 'dmg-hint', 'data-routing-kind': model.routingKind }, t(model.routingKind === 'auto' ? 'routingKindAuto' : 'routingKindCustom')) : null),
+    // The gateway declared no image support for this model; the user asserts it does. The
+    // switch sits next to the effort select and is an icon so it costs no label width.
+    h('label', { className: 'dmg-image', title: t('imageInputAria', { label }) },
+      h('input', { type: 'checkbox', checked: image, disabled, 'data-role': 'image', 'aria-label': t('imageInputAria', { label }), onChange: (e: { target: { checked: boolean } }) => onImage(e.target.checked) }),
+      h('span', { className: 'dmg-image-glyph', 'aria-hidden': 'true' },
+        h('span', { className: 'dmg-image-icon' }))),
     efforts.length ? h('select', {
       className: 'dmg-select', 'aria-label': t('defaultEffortAria', { label }), disabled,
       value: effort ?? '', onChange: (e: { target: { value: string } }) => onEffort(e.target.value === '' ? null : e.target.value),
