@@ -40,9 +40,21 @@ export const strings = (value: unknown): string[] => Array.isArray(value) ? valu
  * gap when the gateway declared nothing. A model the gateway explicitly marked
  * text-only therefore stays text-only.
  */
-export const acceptsImages = (declared: readonly string[], id: string, imageModels: readonly string[]): boolean =>
-  declared.length ? declared.includes('image') : imageModels.includes(id)
-export function mapCatalog(body: unknown, imageModels: readonly string[] = []): CatalogModel[] {
+/**
+ * What a model accepts when the gateway declared no `modalities` for it: a global
+ * default plus per-model exceptions. A real declaration always outranks both.
+ */
+export interface ImagePolicy {
+  /** What a model the gateway left undeclared accepts. */
+  default: boolean
+  /** Per-model exceptions keyed by model id; a present key wins over `default`. */
+  overrides: Readonly<Record<string, boolean>>
+}
+/** Undeclared means accepted: the behaviour every DSH release before 0.2.3 had. */
+export const DEFAULT_IMAGE_POLICY: ImagePolicy = { default: true, overrides: {} }
+export const acceptsImages = (declared: readonly string[], id: string, policy: ImagePolicy): boolean =>
+  declared.length ? declared.includes('image') : (policy.overrides[id] ?? policy.default)
+export function mapCatalog(body: unknown, imagePolicy: ImagePolicy = DEFAULT_IMAGE_POLICY): CatalogModel[] {
   const data = (body as { data?: unknown } | null)?.data
   if (!Array.isArray(data)) throw new Error('Invalid model catalog')
   return data.flatMap(raw => {
@@ -53,7 +65,7 @@ export function mapCatalog(body: unknown, imageModels: readonly string[] = []): 
     const declaredModalities = strings(raw.modalities?.input)
     const info: LlmResolvedModelInfo = {
       provider: TRANSPORT_ID, id: raw.id, name: typeof raw.display_name === 'string' && raw.display_name ? raw.display_name : raw.id,
-      inputModalities: acceptsImages(declaredModalities, raw.id, imageModels) ? ['text', 'image'] : ['text'],
+      inputModalities: acceptsImages(declaredModalities, raw.id, imagePolicy) ? ['text', 'image'] : ['text'],
       ...(contextWindow !== undefined ? { context: { contextWindow } } : {}),
       ...(outputLimit !== undefined ? { defaultMaxTokens: defaultOutputBudget(contextWindow, outputLimit) } : {}),
       ...(efforts.length ? { reasoning: { efforts: efforts.map(id => ({ id: id as never, name: id })) } } : {}),

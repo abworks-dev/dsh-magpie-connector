@@ -296,6 +296,7 @@ export function MagpieSettings({ api }: { api: Api }) {
       usage: h(UsageStatus, { cards, busy, ...(noteScope === undefined ? { notice, alert: usageAlert } : {}), onFetchAll: () => { void fetchAll() }, saving: savingSettings }) })
       : settingsError ? null : h('p', { role: 'status', className: 'dmg-hint' }, t('readingSettings')),
     settings ? h(SidebarUsagePreference, { settings, saving: savingSettings, mutateSettings }) : null,
+    settings ? h(ImagePreference, { settings, saving: savingSettings, mutateSettings }) : null,
     ...providerOrder(groups, cardList).map(provider => h(ProviderGroup, {
       key: provider, provider,
       group: groups.find(g => g.provider === provider),
@@ -797,6 +798,30 @@ function ModelLine({ model, visible, effort, image, disabled, onVisible, onEffor
     h('option', { value: '' }, t('defaultEffortNone')),
     stale ? h('option', { value: effort, disabled: true }, t('effortStale', { effort })) : null,
     ...efforts.map(id => h('option', { key: id, value: id }, id))) : null)
+}
+
+/**
+ * The global image policy: a model the gateway declared nothing about accepts
+ * images unless the user says otherwise, and one model row can still except
+ * itself. A gateway declaration is never overruled from here.
+ */
+function ImagePreference({ settings, saving, mutateSettings }: {
+  settings: SettingsView; saving: boolean; mutateSettings: SettingsMutation
+}) {
+  const [failed, setFailed] = useState('')
+  const enabled = settings.imageDefault !== false
+  const toggle = async () => {
+    setFailed('')
+    const result = await mutateSettings({ imageDefault: !enabled })
+    if (result?.error) setFailed(result.error)
+  }
+  return h('section', { className: 'dmg-panel', 'data-image-default': '' },
+    h('h3', null, t('imageDefaultTitle')),
+    h('label', null,
+      h('input', { type: 'checkbox', checked: enabled, disabled: saving, 'aria-label': t('imageDefaultAria'), onChange: () => { void toggle() } }),
+      h('span', null, t('imageDefaultLabel'))),
+    h('p', { className: 'dmg-hint' }, t('imageDefaultHint')),
+    failed ? h('p', { className: 'dmg-error', role: 'alert' }, failed) : null)
 }
 
 /** Copy for one checkbox in the window selection. */

@@ -2,72 +2,120 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
-import { mapCatalog } from '../src/host/catalog.js'
-import { acceptsImagesFor, updateImageModel, withImageInput } from '../src/host/image-input.js'
+import { DEFAULT_IMAGE_POLICY, mapCatalog } from '../src/host/catalog.js'
+import { acceptsImagesFor, updateImageDefault, updateImageModel, withImageInput } from '../src/host/image-input.js'
 import { SettingsController } from '../src/host/routes.js'
 import { MagpieRuntime } from '../src/host/runtime.js'
-import { MAX_IMAGE_MODELS, SettingsStore, validateImageModels } from '../src/host/settings.js'
+import { MAX_IMAGE_MODELS, SettingsStore, validateImageDefault, validateImageOverrides } from '../src/host/settings.js'
 
 const catalog = () => mapCatalog({ data: [{ id: 'opendesign/deepseek-v4.1-flash' }, { id: 'deepseek/deepseek-v4-pro', modalities: { input: ['text'] } }] })
+const undeclared = 'opendesign/deepseek-v4.1-flash'
+const declared = 'deepseek/deepseek-v4-pro'
+const policy = (overrides: Record<string, boolean>, fallback = true) => ({ default: fallback, overrides })
 
-it('adds and removes one model without touching the others', () => {
+it('accepts images on a model the gateway left undeclared', () => {
   const models = catalog()
-  let saved = updateImageModel([], { model: 'opendesign/deepseek-v4.1-flash', image: true }, models)
-  expect(saved).toEqual(['opendesign/deepseek-v4.1-flash'])
-  expect(updateImageModel(saved, { model: 'opendesign/deepseek-v4.1-flash', image: true }, models)).toEqual(saved)
-  expect(withImageInput(models[0]!, saved).inputModalities).toEqual(['text', 'image'])
-  expect(acceptsImagesFor(models[0]!, saved)).toBe(true)
-  saved = updateImageModel(saved, { model: 'opendesign/deepseek-v4.1-flash', image: false }, models)
-  expect(saved).toEqual([])
-  expect(withImageInput(models[0]!, saved).inputModalities).toEqual(['text'])
+  expect(acceptsImagesFor(models[0]!, DEFAULT_IMAGE_POLICY)).toBe(true)
+  expect(withImageInput(models[0]!, DEFAULT_IMAGE_POLICY).inputModalities).toEqual(['text', 'image'])
 })
 
-it('never overrides a gateway declaration', () => {
+it('lets one model except itself, and forgets the exception when it stops differing', () => {
   const models = catalog()
-  expect(acceptsImagesFor(models[1]!, ['deepseek/deepseek-v4-pro'])).toBe(false)
-  expect(withImageInput(models[1]!, ['deepseek/deepseek-v4-pro']).inputModalities).toEqual(['text'])
+  const excepted = updateImageModel({}, { model: undeclared, image: false }, models, true)
+  expect(excepted).toEqual({ [undeclared]: false })
+  expect(updateImageModel(excepted, { model: undeclared, image: false }, models, true)).toEqual(excepted)
+  expect(acceptsImagesFor(models[0]!, policy(excepted))).toBe(false)
+  expect(withImageInput(models[0]!, policy(excepted)).inputModalities).toEqual(['text'])
+  // Back in line with the default: no key is kept for it.
+  expect(updateImageModel(excepted, { model: undeclared, image: true }, models, true)).toEqual({})
+  expect(acceptsImagesFor(models[0]!, DEFAULT_IMAGE_POLICY)).toBe(true)
+})
+
+it('stores nothing for a model that already agrees with the default', () => {
+  const models = catalog()
+  expect(updateImageModel({}, { model: undeclared, image: true }, models, true)).toEqual({})
+  expect(updateImageModel({}, { model: undeclared, image: false }, models, false)).toEqual({})
+})
+
+it('never overrides a gateway declaration, whichever way the default points', () => {
+  const models = catalog()
+  const forced = updateImageModel({}, { model: declared, image: true }, models, false)
+  expect(forced).toEqual({ [declared]: true })
+  expect(acceptsImagesFor(models[1]!, policy(forced, false))).toBe(false)
+  expect(withImageInput(models[1]!, policy(forced, false)).inputModalities).toEqual(['text'])
 })
 
 it('rejects malformed input and models the catalog does not list', () => {
   const models = catalog()
-  for (const input of [null, [], { model: 'opendesign/deepseek-v4.1-flash' }, { model: 'opendesign/deepseek-v4.1-flash', image: 'yes' }, { model: 'opendesign/deepseek-v4.1-flash', image: true, extra: 1 }, { model: 'gone', image: true }, { model: '', image: true }])
-    expect(() => updateImageModel(['keep'], input, models)).toThrow()
-  expect(updateImageModel(['keep'], { model: 'opendesign/deepseek-v4.1-flash', image: false }, models)).toEqual(['keep'])
+  for (const input of [null, [], { model: undeclared }, { model: undeclared, image: 'yes' }, { model: undeclared, image: true, extra: 1 }, { model: 'gone', image: true }, { model: '', image: true }])
+    expect(() => updateImageModel({}, input, models, true)).toThrow()
 })
 
-it('loads a missing list as empty and rejects a malformed one', () => {
-  expect(validateImageModels(undefined)).toEqual([])
-  expect(validateImageModels(['a', 'b'])).toEqual(['a', 'b'])
-  for (const bad of ['a', [''], ['a', 'a'], [1], Array.from({ length: MAX_IMAGE_MODELS + 1 }, (_, i) => `m${i}`)]) expect(() => validateImageModels(bad)).toThrow()
+it('loads the policy leniently and refuses a malformed declaration', () => {
+  expect(validateImageDefault(undefined)).toBe(true)
+  expect(validateImageDefault(true)).toBe(true)
+  expect(validateImageDefault(false)).toBe(false)
+  for (const bad of ['true', 1, null]) expect(() => validateImageDefault(bad)).toThrow()
+  expect(validateImageOverrides(undefined)).toEqual({})
+  expect(validateImageOverrides({ [undeclared]: false })).toEqual({ [undeclared]: false })
+  for (const bad of [[], 'x', 1, { '': true }, { [undeclared]: 'yes' }, { [undeclared]: 1 }, Object.fromEntries(Array.from({ length: MAX_IMAGE_MODELS + 1 }, (_, i) => [`m${i}`, true]))])
+    expect(() => validateImageOverrides(bad)).toThrow()
+})
+
+it('drops the exceptions a new default already explains', () => {
+  expect(updateImageDefault(false, { [undeclared]: true, [declared]: false })).toEqual({ [undeclared]: true })
+  expect(updateImageDefault(true, { [undeclared]: true, [declared]: false })).toEqual({ [declared]: false })
+  expect(updateImageDefault(true, {})).toEqual({})
 })
 
 const credentials = () => ({ describe: async () => ({ configured: false, writable: true }), resolve: async () => undefined, set: vi.fn(), unset: vi.fn() }) as never
 
-it('settings stores the override and reports it per model', async () => {
+it('settings report the policy, store an exception, and reset it with the default', async () => {
   const models = catalog()
   const store = new SettingsStore()
   const runtime = new MagpieRuntime(credentials(), store)
   runtime.current.catalog = models
   const settings = new SettingsController(runtime)
-  const view = await (await settings.handle({ imageModel: { model: 'opendesign/deepseek-v4.1-flash', image: true } })).json() as { imageModels: string[]; groups: { models: { id: string; image: boolean }[] }[] }
-  expect(store.value.imageModels).toEqual(['opendesign/deepseek-v4.1-flash'])
-  expect(view.imageModels).toEqual(['opendesign/deepseek-v4.1-flash'])
-  expect(view.groups.flatMap(group => group.models).map(model => [model.id, model.image])).toEqual([['opendesign/deepseek-v4.1-flash', true], ['deepseek/deepseek-v4-pro', false]])
-  expect((await settings.handle({ imageModel: { model: 'opendesign/deepseek-v4.1-flash', image: false } })).status).toBe(200)
-  expect(store.value.imageModels).toEqual([])
+  type View = { imageDefault?: boolean; groups: { models: { id: string; image: boolean }[] }[] }
+  const viewOf = async (input: Record<string, unknown>) => await (await settings.handle(input)).json() as View
+  const flags = (view: View) => view.groups.flatMap(group => group.models).map(model => [model.id, model.image])
+
+  expect(flags(await viewOf({}))).toEqual([[undeclared, true], [declared, false]])
+  expect((await viewOf({})).imageDefault).toBe(true)
+
+  // One exception while the default stays on.
+  expect(flags(await viewOf({ imageModel: { model: undeclared, image: false } }))).toEqual([[undeclared, false], [declared, false]])
+  expect(store.value.imageOverrides).toEqual({ [undeclared]: false })
+
+  // The default goes off: the exception is no longer meaningful and is dropped.
+  const off = await viewOf({ imageDefault: false })
+  expect(off.imageDefault).toBe(false)
+  expect(flags(off)).toEqual([[undeclared, false], [declared, false]])
+  expect(store.value.imageOverrides).toEqual({})
+
+  // With the default off, an opt-in is what gets stored.
+  expect(flags(await viewOf({ imageModel: { model: undeclared, image: true } }))).toEqual([[undeclared, true], [declared, false]])
+  expect(store.value.imageOverrides).toEqual({ [undeclared]: true })
+
+  expect((await settings.handle({ imageDefault: 'yes' })).status).toBe(400)
   expect((await settings.handle({ imageModel: { model: 'gone', image: true } })).status).toBe(400)
   await runtime.dispose()
 })
 
-it('the saved override survives a restart of the settings file', async () => {
+it('both the default and the exception survive a restart of the settings file', async () => {
   const models = catalog()
   const path = join(mkdtempSync(join(tmpdir(), 'magpie-image-')), 'settings.json')
   const first = new MagpieRuntime(credentials(), new SettingsStore(path))
   first.current.catalog = models
-  expect((await new SettingsController(first).handle({ imageModel: { model: 'opendesign/deepseek-v4.1-flash', image: true } })).status).toBe(200)
+  const settings = new SettingsController(first)
+  expect((await settings.handle({ imageDefault: false })).status).toBe(200)
+  expect((await settings.handle({ imageModel: { model: undeclared, image: true } })).status).toBe(200)
   await first.dispose()
+
   const restarted = new MagpieRuntime(credentials(), new SettingsStore(path))
-  expect(restarted.imageModels).toEqual(['opendesign/deepseek-v4.1-flash'])
-  expect(withImageInput(models[0]!, restarted.imageModels).inputModalities).toEqual(['text', 'image'])
+  expect(restarted.imagePolicy).toEqual({ default: false, overrides: { [undeclared]: true } })
+  expect(acceptsImagesFor(models[0]!, restarted.imagePolicy)).toBe(true)
+  expect(acceptsImagesFor(models[1]!, restarted.imagePolicy)).toBe(false)
+  expect(withImageInput(models[0]!, restarted.imagePolicy).inputModalities).toEqual(['text', 'image'])
   await restarted.dispose()
 })

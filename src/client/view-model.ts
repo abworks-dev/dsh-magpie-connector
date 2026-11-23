@@ -42,8 +42,8 @@ export interface SettingsView {
   access?: { clientId?: { configured?: boolean; writable?: boolean }; clientSecret?: { configured?: boolean; writable?: boolean } }
   lastSyncAt?: string; lastSyncError?: string; lastSyncErrorKind?: SyncErrorKind
   groups?: ModelGroup[]; visibleModels?: Record<string, string[]>; defaultEfforts?: Record<string, string>
-  /** Model ids allowed to receive images although the gateway declared no `modalities`. */
-  imageModels?: string[]
+  /** Whether models the gateway left undeclared accept images (`undefined` = yes). */
+  imageDefault?: boolean
   /** Initial route registration failed (design D6): the host must be restarted to recover. */
   routeRegistrationError?: { code: string; route?: string }
   /** knownOwners was invalid at load and reset to empty (spec 归属 route 持久). */

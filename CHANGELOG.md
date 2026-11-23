@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- **网关没声明图片能力的模型，DSH 0.2.3 起发不出图片；现在可以按模型显式声明。** DSH 0.2.3-alpha.2 提交附件时硬校验 `model.inputModalities`，缺 `image` 就直接报 `session/attachment-invalid`（`MODEL_DOES_NOT_SUPPORT_IMAGES`）。连接器把网关目录翻成 DSH 模型声明时，`modalities.input` 缺失一律落成 `['text']`，于是 `opendesign/deepseek-v4.1-flash` 这类网关未填该字段、实际能收图的模型被 DSH 挡在输入框外（旧版 DSH 不校验声明，所以此前一直可用，用户体感是「升级后突然发不了图」）。设置页每个模型行新增「图片」勾选，写入新的 `imageModels` 偏好；`mapCatalog`、`listModels`、`resolveModel` 在读取时应用它。网关自己的声明永远优先：`modalities.input` 非空时按网关判定，只有「网关什么都没声明」才由偏好补位，不会把一次用户勾选当成对真实声明的覆盖。偏好只存模型 id，重启后仍生效；模型从目录消失时仅该条目失效，其余偏好保留。
+- **网关没声明图片能力的模型，默认恢复接收图片；设置页可整体关闭，也可逐模型取消。** DSH 0.2.3-alpha.2 提交附件时硬校验 `model.inputModalities`，缺 `image` 就直接报 `session/attachment-invalid`（`MODEL_DOES_NOT_SUPPORT_IMAGES`）。连接器把网关目录翻成 DSH 模型声明时，`modalities.input` 缺失一律落成 `['text']`，于是 `opendesign/deepseek-v4.1-flash` 这类网关未填该字段、实际能收图的模型被 DSH 挡在输入框外（旧版 DSH 不校验声明，所以此前一直可用，用户体感是「升级后突然发不了图」）。现在「网关什么都没声明」按接收图片处理，与 0.2.3 之前一致；设置页新增「图片输入」开关可整体关掉，每个模型行另有勾选可单独取消。网关自己的声明永远优先：`modalities.input` 非空时按网关判定（声明仅文本的模型保持仅文本，勾选也不会把它变成可收图），只有空声明才由偏好补位，不会把一次用户勾选当成对真实声明的覆盖。偏好存 `imageDefault` 与只含被改模型的 `imageOverrides`；与默认值相同的选择不写键，改默认值时被新默认值解释的旧覆盖一并丢弃。重启后仍生效，模型从目录消失时仅该条目失效，其余偏好保留。
+- **修复设置页空白、侧栏卡片不渲染：客户端 `apply` 的第二参数被当成 API。** DSH 0.2.3 起客户端模块系统把该行的配置对象作为 `apply(ctx, config)` 的第二个参数传入，而插件把该参数当可选 API 用（`api: Api = createFetchApi()`，默认参数只对 `undefined` 生效）。配置对象是非函数，所有 `inject: () => ({ api })` 的槽位在第一次发请求时抛 `TypeError: api is not a function`，宿主随即停用该 section——表现为 Magpie 设置页打开空白（`slot entry crashed in 'settings.section'`），侧栏用量卡片同样受影响。现在只有在第二参数确实是函数时才当 API 用（测试仍可注入假 API），否则一律使用插件内置的 fetch API。
 
 ## 0.7.4 — 2026-11-20
 
