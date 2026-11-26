@@ -102,6 +102,66 @@ it('settings report the policy, store an exception, and reset it with the defaul
   await runtime.dispose()
 })
 
+it('refuses an override table past the read limit instead of losing every choice', () => {
+  const models = mapCatalog({ data: Array.from({ length: MAX_IMAGE_MODELS + 2 }, (_, i) => ({ id: `vendor/m${i}` })) })
+  let overrides: Record<string, boolean> = {}
+  for (let i = 0; i < MAX_IMAGE_MODELS; i += 1) overrides = updateImageModel(overrides, { model: `vendor/m${i}`, image: false }, models, true)
+  expect(Object.keys(overrides)).toHaveLength(MAX_IMAGE_MODELS)
+  expect(() => updateImageModel(overrides, { model: `vendor/m${MAX_IMAGE_MODELS}`, image: false }, models, true)).toThrow('Invalid imageOverrides')
+})
+
+it('keeps the saved policy when a controller write would cross the limit', async () => {
+  const models = mapCatalog({ data: Array.from({ length: MAX_IMAGE_MODELS + 1 }, (_, i) => ({ id: `vendor/m${i}` })) })
+  const store = new SettingsStore()
+  const runtime = new MagpieRuntime(credentials(), store)
+  runtime.current.catalog = models
+  const settings = new SettingsController(runtime)
+  for (let i = 0; i < MAX_IMAGE_MODELS; i += 1) {
+    expect((await settings.handle({ imageModel: { model: `vendor/m${i}`, image: false } })).status).toBe(200)
+  }
+  const kept = { ...store.value.imageOverrides }
+  expect(Object.keys(kept)).toHaveLength(MAX_IMAGE_MODELS)
+
+  const rejected = await settings.handle({ imageModel: { model: `vendor/m${MAX_IMAGE_MODELS}`, image: false } })
+  expect(rejected.status).toBe(400)
+  expect(await rejected.json()).toEqual({ error: 'Invalid imageOverrides' })
+  expect(store.value.imageOverrides).toEqual(kept)
+  expect(runtime.imagePolicy).toEqual({ default: true, overrides: kept })
+  await runtime.dispose()
+})
+
+it('applies a default change and a model exception from the same request', async () => {
+  const models = catalog()
+  const store = new SettingsStore()
+  const runtime = new MagpieRuntime(credentials(), store)
+  runtime.current.catalog = models
+  const settings = new SettingsController(runtime)
+  type View = { imageDefault?: boolean; groups: { models: { id: string; image: boolean }[] }[] }
+
+  const response = await settings.handle({ imageDefault: false, imageModel: { model: undeclared, image: true } })
+  expect(response.status).toBe(200)
+  const view = await response.json() as View
+  expect(view.imageDefault).toBe(false)
+  expect(view.groups.flatMap(group => group.models).map(model => [model.id, model.image])).toEqual([[undeclared, true], [declared, false]])
+  expect(store.value.imageDefault).toBe(false)
+  expect(store.value.imageOverrides).toEqual({ [undeclared]: true })
+  await runtime.dispose()
+})
+
+it('reports which models the gateway declared, so only those switches lock', async () => {
+  const models = catalog()
+  const store = new SettingsStore()
+  const runtime = new MagpieRuntime(credentials(), store)
+  runtime.current.catalog = models
+  const settings = new SettingsController(runtime)
+  type View = { groups: { models: { id: string; image: boolean; imageDeclared?: boolean }[] }[] }
+  const flags = (view: View) => view.groups.flatMap(group => group.models).map(model => [model.id, model.imageDeclared])
+
+  expect(flags(await (await settings.handle({})).json() as View)).toEqual([[undeclared, false], [declared, true]])
+  expect(flags(await (await runtime.settings()).json() as View)).toEqual([[undeclared, false], [declared, true]])
+  await runtime.dispose()
+})
+
 it('both the default and the exception survive a restart of the settings file', async () => {
   const models = catalog()
   const path = join(mkdtempSync(join(tmpdir(), 'magpie-image-')), 'settings.json')

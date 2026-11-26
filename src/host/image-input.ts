@@ -1,4 +1,5 @@
 import { acceptsImages, type CatalogModel, type ImagePolicy } from './catalog.js'
+import { validateImageOverrides } from './settings.js'
 
 type Modalities = NonNullable<CatalogModel['info']['inputModalities']>
 
@@ -16,6 +17,8 @@ export function withImageInput(model: CatalogModel, policy: ImagePolicy): Catalo
 /** Whether the model accepts images under the saved policy. */
 export const acceptsImagesFor = (model: CatalogModel, policy: ImagePolicy): boolean =>
   acceptsImages(model.declaredModalities ?? [], model.info.id, policy)
+/** Whether the gateway itself declared input modalities; an empty declaration is silence, not a denial. */
+export const hasDeclaredModalities = (model: CatalogModel): boolean => (model.declaredModalities?.length ?? 0) > 0
 
 /**
  * Set or clear one model's exception. A value equal to the current default clears
@@ -30,7 +33,10 @@ export function updateImageModel(saved: Readonly<Record<string, boolean>>, input
   const next = { ...saved }
   if (image === imageDefault) delete next[model]
   else next[model] = image
-  return next
+  // The write must obey the same capacity rule as the read: an over-long table is
+  // rejected here, before it can make `imagePolicy` fall back to the default and
+  // silently discard every saved preference.
+  return validateImageOverrides(next)
 }
 
 /** Drop the exceptions a changed default already explains: they stop being exceptions. */

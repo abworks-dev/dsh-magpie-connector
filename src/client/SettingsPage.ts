@@ -758,6 +758,7 @@ function ProviderGroup({ provider, group, settings, cards, busy, saving, mutateS
       visible: model.visible ?? (following || (saved[provider] ?? []).includes(model.id)),
       effort: settings?.defaultEfforts?.[model.id],
       image: model.image === true,
+      imageDeclared: model.imageDeclared === true,
       onVisible: (visible: boolean) => setVisible(model, visible),
       onEffort: (effort: string | null) => { void post({ defaultEffort: { model: model.id, effort } }) },
       onImage: (image: boolean) => { void post({ imageModel: { model: model.id, image } }) },
@@ -773,8 +774,8 @@ function ProviderGroup({ provider, group, settings, cards, busy, saving, mutateS
     error ? h('p', { className: 'dmg-error', role: 'alert' }, error) : null)
 }
 
-function ModelLine({ model, visible, effort, image, disabled, onVisible, onEffort, onImage }: {
-  model: ModelRow; visible: boolean; effort: string | undefined; image: boolean; disabled: boolean
+function ModelLine({ model, visible, effort, image, imageDeclared, disabled, onVisible, onEffort, onImage }: {
+  model: ModelRow; visible: boolean; effort: string | undefined; image: boolean; imageDeclared: boolean; disabled: boolean
   onVisible: (visible: boolean) => void; onEffort: (effort: string | null) => void; onImage: (image: boolean) => void
 }) {
   const efforts = model.efforts ?? []
@@ -787,10 +788,10 @@ function ModelLine({ model, visible, effort, image, disabled, onVisible, onEffor
       h('span', null, label),
       model.name && model.name !== model.id ? h('code', null, model.id) : null,
       model.routingKind ? h('span', { className: 'dmg-hint', 'data-routing-kind': model.routingKind }, t(model.routingKind === 'auto' ? 'routingKindAuto' : 'routingKindCustom')) : null),
-    // The gateway declared no image support for this model; the user asserts it does. The
-    // switch sits next to the effort select and is an icon so it costs no label width.
-    h('label', { className: 'dmg-image', title: t('imageInputAria', { label }) },
-      h('input', { type: 'checkbox', checked: image, disabled, 'data-role': 'image', 'aria-label': t('imageInputAria', { label }), onChange: (e: { target: { checked: boolean } }) => onImage(e.target.checked) }),
+    // An empty gateway declaration is a gap the user may fill; an explicit one is a fact
+    // and the switch only reports it. The switch sits next to the effort select as an icon.
+    h('label', { className: 'dmg-image', title: imageDeclared ? t('imageInputDeclared', { label }) : t('imageInputAria', { label }), 'data-image-declared': imageDeclared ? 'true' : 'false' },
+      h('input', { type: 'checkbox', checked: image, disabled: disabled || imageDeclared, 'data-role': 'image', 'aria-label': imageDeclared ? t('imageInputDeclared', { label }) : t('imageInputAria', { label }), onChange: (e: { target: { checked: boolean } }) => onImage(e.target.checked) }),
       h('span', { className: 'dmg-image-glyph', 'aria-hidden': 'true' },
         h('span', { className: 'dmg-image-icon' }))),
     efforts.length ? h('select', {

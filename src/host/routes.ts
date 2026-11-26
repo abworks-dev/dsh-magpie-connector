@@ -1,7 +1,7 @@
 import type { MagpieRuntime } from './runtime.js'
 import { isVisible, validateVisibility } from './visibility.js'
 import { updateDefaultEffort } from './default-effort.js'
-import { acceptsImagesFor, updateImageDefault, updateImageModel } from './image-input.js'
+import { acceptsImagesFor, hasDeclaredModalities, updateImageDefault, updateImageModel } from './image-input.js'
 import { CardsController } from './cards.js'
 import { ResetController } from './reset.js'
 import { SpeedController } from './speed.js'
@@ -37,7 +37,7 @@ export class SettingsController {
         if('imageDefault' in input && typeof input.imageDefault!=='boolean') throw new Error('Invalid imageDefault')
         const imageDefault='imageDefault' in input ? input.imageDefault as boolean : undefined
         const imageModel='imageModel' in input ? updateImageModel(runtime.imagePolicy.overrides,input.imageModel,runtime.current.catalog,imageDefault ?? runtime.imagePolicy.default) : undefined
-        const imageOverrides=imageDefault!==undefined ? updateImageDefault(imageDefault,runtime.imagePolicy.overrides) : imageModel
+        const imageOverrides=imageDefault!==undefined ? updateImageDefault(imageDefault,imageModel ?? runtime.imagePolicy.overrides) : imageModel
         const connection=Object.fromEntries(Object.entries(input).filter(([k])=>['lines','resync'].includes(k)))
         if(Object.keys(connection).length) {const result=await runtime.settings(connection);if(!result.ok)return result}
         if(visibleModels!==undefined || defaultEfforts!==undefined || imageDefault!==undefined || imageOverrides!==undefined || sidebarUsage!==undefined || sidebarRefreshMinutes!==undefined || sidebarWindows!==undefined) {
@@ -48,7 +48,7 @@ export class SettingsController {
     }
     const response=await runtime.settings()
     const view=await response.json() as Record<string,unknown>
-    view.groups=[...new Set(runtime.current.catalog.map(m=>m.provider))].map(provider=>({provider,models:runtime.current.catalog.filter(m=>m.provider===provider).map(m=>({id:m.info.id,name:m.info.name,efforts:m.efforts,...(m.routingKind?{routingKind:m.routingKind}:{}),visible:isVisible(m,runtime.store.value.visibleModels),image:acceptsImagesFor(m,runtime.imagePolicy)}))}))
+    view.groups=[...new Set(runtime.current.catalog.map(m=>m.provider))].map(provider=>({provider,models:runtime.current.catalog.filter(m=>m.provider===provider).map(m=>({id:m.info.id,name:m.info.name,efforts:m.efforts,...(m.routingKind?{routingKind:m.routingKind}:{}),visible:isVisible(m,runtime.store.value.visibleModels),image:acceptsImagesFor(m,runtime.imagePolicy),imageDeclared:hasDeclaredModalities(m)}))}))
     view.imageDefault=runtime.imagePolicy.default
     return Response.json(runtime.redactJson(view))
   }

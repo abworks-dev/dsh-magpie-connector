@@ -7,7 +7,7 @@ import {
 import { GatewayTransport, validateIdentity, type ConnectionIdentity } from './transport.js'
 import { LineSelector, type Probe } from './selection.js'
 import { DEFAULT_IMAGE_POLICY, ROUTING_OWNER, mapCatalog, routeOf, type CatalogModel, type ImagePolicy } from './catalog.js'
-import { acceptsImagesFor } from './image-input.js'
+import { acceptsImagesFor, hasDeclaredModalities } from './image-input.js'
 import type { PublishResult } from './registrar.js'
 import { DEFAULT_SIDEBAR_WINDOWS, migrateLegacySidebarWindow, normalizeSidebarWindows, type SidebarWindowKind } from '../shared/sidebar-window.js'
 
@@ -614,7 +614,7 @@ export class MagpieRuntime {
       lines: viewLines, activeLineId: active?.line.id ?? null,
       pending: this.failedFields, retainedCredentials: this.retainedNow(config.lines),
       lastSyncAt: gen.lastSyncAt, lastSyncError: gen.lastSyncError, lastSyncErrorKind: gen.lastSyncErrorKind,
-      groups: [...new Set(gen.catalog.map(m => m.provider))].map(provider => ({ provider, models: gen.catalog.filter(m => m.provider === provider).map(m => ({ id: m.info.id, name: m.info.name, efforts: m.efforts, ...(m.routingKind ? { routingKind: m.routingKind } : {}), image: acceptsImagesFor(m, this.imagePolicy) })) })),
+      groups: [...new Set(gen.catalog.map(m => m.provider))].map(provider => ({ provider, models: gen.catalog.filter(m => m.provider === provider).map(m => ({ id: m.info.id, name: m.info.name, efforts: m.efforts, ...(m.routingKind ? { routingKind: m.routingKind } : {}), image: acceptsImagesFor(m, this.imagePolicy), imageDeclared: hasDeclaredModalities(m) })) })),
       visibleModels: this.store.value.visibleModels, defaultEfforts: this.store.value.defaultEfforts, imageDefault: this.imagePolicy.default,
       sidebarUsage: this.store.value.sidebarUsage === true,
       sidebarRefreshMinutes: this.store.value.sidebarRefreshMinutes ?? 5,

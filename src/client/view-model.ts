@@ -24,7 +24,7 @@ export interface Card {
 export type CardsStatus = 'ok' | 'forbidden' | 'error' | 'unconfigured'
 export interface CardsView { status: CardsStatus; error?: string; cards: Card[] }
 
-export interface ModelRow { id: string; name?: string; efforts?: string[]; visible?: boolean; image?: boolean; /** Set by the host on Magpie routing entries only. */ routingKind?: 'auto' | 'custom' }
+export interface ModelRow { id: string; name?: string; efforts?: string[]; visible?: boolean; image?: boolean; /** The gateway itself declared input modalities: the image switch is read-only. */ imageDeclared?: boolean; /** Set by the host on Magpie routing entries only. */ routingKind?: 'auto' | 'custom' }
 /** Visibility key and settings section of every routing entry (host `ROUTING_OWNER`). */
 export const ROUTING_PROVIDER = 'routing'
 export interface ModelGroup { provider: string; models: ModelRow[] }
